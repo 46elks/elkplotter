@@ -13,7 +13,8 @@ for release mode (no debug symbols, faster).
 
 We also need vpype and it's plugin vpype-vectrace available on $PATH.
 
-    pipx install vpype vpype-vectrace
+    pipx install vpype
+    pipx inject vpypye vpype-vectrace
 
 The client connects via websocket to /ws. When ready to plot, it sends "ready."
 

@@ -104,20 +104,22 @@ proc smsHandler(request: Request) {.gcsafe.} =
     withLock L:
       if clients.len == 0:
         request.respond(204)
-        echo "Got SMS, but no plotters connected."
+        echo "Got SMS, but no plotters connected.\nmessage: ", userPrompt
         return
       block findPlotter:
         for ws, pl in clients.mpairs:
           if pl.isReady:
-            echo fmt"Found plotter {plotter}"
             pl.isReady = false
             plotter = pl
             break findPlotter
-        echo "Got SMS, but no vacant plotters."
+        echo "Got SMS, but no vacant plotters.\nmessage: ", userPrompt
         request.respond(200, body = "All plotters are busy right now, try again later! :)")
         return
 
   request.respond(204)
+
+  echo "Got SMS, found vacant plotter {plotter}."
+  echo "Generating image for: ", userPrompt
 
   var prompt: string
   {.gcsafe.}:
