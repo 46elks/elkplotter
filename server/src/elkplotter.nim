@@ -92,7 +92,7 @@ proc smsHandler(request: Request) {.gcsafe.} =
     data = request.body.parseSearch()
     userPrompt = data["message"]
     smsTimestamp = data["created"]
-    smsdt = smsTimestamp.parse("yyyy-MM-dd'T'hh:mm:ss'.'ffffff", tz=utc())
+    smsdt = smsTimestamp.parse("yyyy-MM-dd hh:mm:ss'.'ffffff", tz=utc())
     timedelta = now().utc - smsdt
 
   if timedelta > initDuration(minutes=1):
