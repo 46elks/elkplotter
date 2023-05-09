@@ -128,6 +128,8 @@ proc smsHandler(request: Request) {.gcsafe.} =
     path = generateImage(prompt)
     image = readFile(path)
     wsMessage = "pleaseplot: " & image
+
+  echo "Sending to plotter..."
   plotter.websocket.send(wsMessage)
   removeFile(path)
 
