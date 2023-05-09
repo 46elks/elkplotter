@@ -1,0 +1,2 @@
+SERVER = "ws://localhost:8080/ws"
+DEBUG = True

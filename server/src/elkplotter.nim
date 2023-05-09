@@ -5,7 +5,6 @@ import std/[
   locks,
   os,
   parsecfg,
-  sets,
   strformat,
   strutils,
   tables,
@@ -18,15 +17,14 @@ import webby
 type
   Plotter = object
     websocket: WebSocket
-    isFree: bool
+    isReady: bool
 
 let
   config = loadConfig("config.ini")
 
 var
   L: Lock
-  clients: HashSet[WebSocket]
-  plotters: OrderedTable[WebSocket, Plotter]
+  clients: OrderedTable[WebSocket, Plotter]
 
 initLock(L)
 
@@ -77,14 +75,16 @@ proc vpype(inpath, outpath: string) =
 proc generateImage(prompt: string): string =
   let image = dallE(prompt)
 
-  let (imgfile, inpath) = createTempFile("wsplotter_", "_orig.png")
+  let (imgfile, inpath) = createTempFile("elkplotter_", "_orig.png")
   imgfile.write(image)
   close imgfile
 
-  let (tracefile, outpath) = createTempFile("wsplotter_", "_traced.svg")
+  let (tracefile, outpath) = createTempFile("elkplotter_", "_traced.svg")
   close tracefile
-
   vpype(inpath, outpath)
+
+  removeFile(inpath)
+
   return outpath
 
 proc smsHandler(request: Request) {.gcsafe.} =
@@ -107,13 +107,13 @@ proc smsHandler(request: Request) {.gcsafe.} =
         echo "Got SMS, but no plotters connected."
         return
       block findPlotter:
-        for ws, pl in plotters.mpairs:
-          if pl.isFree:
+        for ws, pl in clients.mpairs:
+          if pl.isReady:
             echo fmt"Found plotter {plotter}"
-            pl.isFree = false
+            pl.isReady = false
             plotter = pl
             break findPlotter
-        echo "Got SMS, but no free plotters."
+        echo "Got SMS, but no vacant plotters."
         request.respond(200, body = "All plotters are busy right now, try again later! :)")
         return
 
@@ -129,6 +129,7 @@ proc smsHandler(request: Request) {.gcsafe.} =
     image = readFile(path)
     wsMessage = "pleaseplot: " & image
   plotter.websocket.send(wsMessage)
+  removeFile(path)
 
 proc upgradeHandler(request: Request) =
   let websocket = request.upgradeToWebSocket()
@@ -144,20 +145,20 @@ proc wsHandler(websocket: WebSocket,
     echo "Client connected: ", websocket
     {.gcsafe.}:
       withLock L:
-        clients.incl(websocket)
+        clients[websocket] = Plotter(websocket: websocket, isReady: false)
   of MessageEvent:
     let data = message.data.strip()
     echo message.kind, ": ", data
     if data == "ready.":
+      echo fmt"Plotter {websocket} is ready."
       {.gcsafe.}:
         withLock L:
-          plotters[websocket] = Plotter(websocket: websocket, isFree: true)
+          clients[websocket].isReady = true
   of CloseEvent:
     echo "Client disconnected: ", websocket
     {.gcsafe.}:
       withLock L:
-        clients.excl(websocket)
-        plotters.del(websocket)
+        clients.del(websocket)
   of ErrorEvent:
     discard
 
