@@ -11,5 +11,5 @@ bin           = @["elkplotter"]
 # Dependencies
 
 requires "nim >= 1.6.12"
-requires "mummy == 0.2.10"
+requires "mummy == 0.2.16"
 requires "webby >= 0.1.9"
