@@ -20,25 +20,28 @@ type
     isReady: bool
 
 let
-  config = loadConfig("config.ini")
+  globalConfig = loadConfig("config.ini")
 
 var
   L: Lock
   clients: OrderedTable[WebSocket, Plotter]
+  tlsConfig {.threadvar.}: Config
 
 initLock(L)
 
-proc dallE(prompt: string): string =
-  var
-    openAIkey: string
-    imageWidth: string
-    imageHeight: string
+proc getConfig(): Config =
+  if tlsConfig.isNil:
+    {.gcsafe.}:
+      withLock L:
+        tlsConfig = globalConfig
+  result = tlsConfig
 
-  {.gcsafe.}:
-    withLock L:
-      openAIkey = config.getSectionValue("OpenAI", "apikey")
-      imageWidth = config.getSectionValue("OpenAI", "width")
-      imageHeight = config.getSectionValue("OpenAI", "height")
+proc dallE(prompt: string): string =
+  let
+    config = getConfig()
+    openAIkey = config.getSectionValue("OpenAI", "apikey")
+    imageWidth = config.getSectionValue("OpenAI", "width")
+    imageHeight = config.getSectionValue("OpenAI", "height")
 
   let client = newHttpClient()
   client.headers = newHttpHeaders({
@@ -60,10 +63,7 @@ proc dallE(prompt: string): string =
   result = decode(b64_json.str)
 
 proc vpype(inpath, outpath: string) =
-  var vpypeParams: string
-  {.gcsafe.}:
-    withLock L:
-      vpypeParams = config.getSectionValue("vpype", "params")
+  let vpypeParams = getConfig().getSectionValue("vpype", "params")
   discard execShellCmd(fmt"vpype iread {inpath} {vpypeParams} write {outpath}")
 
 proc generateImage(prompt: string): string =
@@ -78,8 +78,7 @@ proc generateImage(prompt: string): string =
   vpype(inpath, outpath)
 
   removeFile(inpath)
-
-  return outpath
+  result = outpath
 
 proc smsHandler(request: Request) {.gcsafe.} =
   let
@@ -115,12 +114,9 @@ proc smsHandler(request: Request) {.gcsafe.} =
   echo fmt"SMS received, found vacant plotter {plotter}."
   echo "Generating image for: ", userPrompt
 
-  var prompt: string
-  {.gcsafe.}:
-    withLock L:
-      prompt = config.getSectionValue("Image", "prompt") & ", " & userPrompt
-
   let
+    promptPrefix = getConfig().getSectionValue("Image", "prompt")
+    prompt = promptPrefix & ", " & userPrompt
     path = generateImage(prompt)
     image = readFile(path)
     wsMessage = "pleaseplot: " & image
@@ -166,8 +162,8 @@ when isMainModule:
   router.get("/ws", upgradeHandler)
 
   let
-    hostname = config.getSectionValue("", "hostname")
-    port = config.getSectionValue("", "port").parseInt()
+    hostname = globalConfig.getSectionValue("", "hostname")
+    port = globalConfig.getSectionValue("", "port").parseInt()
     server = newServer(router, wsHandler)
 
   echo fmt"Serving on http://{hostname}:{port}"
