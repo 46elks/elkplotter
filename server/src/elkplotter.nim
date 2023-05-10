@@ -64,9 +64,7 @@ proc vpype(inpath, outpath: string) =
   {.gcsafe.}:
     withLock L:
       vpypeParams = config.getSectionValue("vpype", "params")
-  discard execShellCmd(
-    fmt"vpype iread {inpath} {vpypeParams} write {outpath}"
-  )
+  discard execShellCmd(fmt"vpype iread {inpath} {vpypeParams} write {outpath}")
 
 proc generateImage(prompt: string): string =
   let image = dallE(prompt)
