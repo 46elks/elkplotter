@@ -60,16 +60,12 @@ proc dallE(prompt: string): string =
   result = decode(b64_json.str)
 
 proc vpype(inpath, outpath: string) =
+  var vpypeParams: string
+  {.gcsafe.}:
+    withLock L:
+      vpypeParams = config.getSectionValue("vpype", "params")
   discard execShellCmd(
-    fmt"""
-    vpype \
-    iread {inpath} \
-    linesimplify -t 1 \
-    filter -m 20 \
-    penwidth 0.3mm \
-    layout --fit-to-margins 3cm --landscape a6 \
-    write {outpath}
-    """
+    fmt"vpype iread {inpath} {vpypeParams} write {outpath}"
   )
 
 proc generateImage(prompt: string): string =
