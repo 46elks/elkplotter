@@ -65,7 +65,7 @@ proc vpype(inpath, outpath: string) =
     vpype \
     iread {inpath} \
     linesimplify -t 1 \
-    filter -m 10 \
+    filter -m 20 \
     penwidth 0.3mm \
     layout --fit-to-margins 3cm --landscape a6 \
     write {outpath}
