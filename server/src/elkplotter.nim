@@ -114,12 +114,22 @@ proc smsHandler(request: Request) {.gcsafe.} =
   echo fmt"SMS received, found vacant plotter {plotter}."
   echo "Generating image for: ", userPrompt
 
-  let
-    promptPrefix = getConfig().getSectionValue("Image", "prompt")
-    prompt = promptPrefix & ", " & userPrompt
+  var
+    wsMessage: string
+    path: string
+  try:
+    let
+      promptPrefix = getConfig().getSectionValue("Image", "prompt")
+      prompt = promptPrefix & ", " & userPrompt
     path = generateImage(prompt)
-    image = readFile(path)
+    let image = readFile(path)
     wsMessage = "pleaseplot: " & image
+  except CatchableError as e:
+    echo "Could not generate image."
+    {.gcsafe.}:
+      withLock L:
+        clients[plotter.websocket].isReady = true
+    raise e
 
   echo "Sending to plotter..."
   plotter.websocket.send(wsMessage)
