@@ -21,21 +21,36 @@ ws.send("hello, server!")
 while True:
     print("Sending ready to server.")
     ws.send("ready.")
+
     command = ws.recv()
     if not command.startswith("pleaseplot: "):
         print("Got unknown command from server: ", command[:20])
         continue
-    print("Starting plot!")
+
     svg = command.removeprefix("pleaseplot: ")
     try:
         ad.plot_setup(svg)
     except RuntimeError:
         print("Got invalid SVG from server.")
         continue
-    if config.DEBUG:
-        ad.options.preview = True
+
+    print("Received SVG!")
+    print()
+
+    ad.options.report_time = True
+    ad.options.preview = True
     ad.plot_run()
-    print("Plot done.")
+
+    if config.DEBUG:
+        print("Debug mode active, twiddling thumbs...")
+    else:
+        print("Starting plot...\n")
+        ad.options.preview = False
+        ad.plot_run()
+        print("\nPlot done!")
+
+    print()
+
     if cooldown:
         print(f"Cooling down for {cooldown} seconds...")
         time.sleep(cooldown)
