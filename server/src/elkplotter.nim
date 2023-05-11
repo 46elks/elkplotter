@@ -18,6 +18,7 @@ type
   Plotter = object
     websocket: WebSocket
     isReady: bool
+  HttpError = object of IOError
 
 let
   globalConfig = loadConfig("config.ini")
@@ -57,9 +58,14 @@ proc dallE(prompt: string): string =
       , "response_format": "b64_json"
       }
     response = client.post("https://api.openai.com/v1/images/generations", body = $data)
+
+  if not response.code.is2xx:
+    raise newException(HttpError,
+                       &"Got HTTP {response.code} from OpenAI, body:\n{response.body}")
+
+  let
     respData = response.body.parseJson()
     b64_json = respData["data"][0]["b64_json"]
-
   result = decode(b64_json.str)
 
 proc vpype(inpath, outpath: string) =
