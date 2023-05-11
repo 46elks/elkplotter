@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import time
+
 import websocket
 from pyaxidraw import axidraw
 
@@ -8,6 +10,8 @@ ad = axidraw.AxiDraw()
 
 ws = websocket.WebSocket()
 ws.connect(config.SERVER)
+
+cooldown = getattr(config, 'COOLDOWN', None)
 
 hello = ws.recv()
 if hello != "hello!":
@@ -32,3 +36,6 @@ while True:
         ad.options.preview = True
     ad.plot_run()
     print("Plot done.")
+    if cooldown:
+        print(f"Cooling down for {cooldown} seconds...")
+        time.sleep(cooldown)
