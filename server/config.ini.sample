@@ -1,18 +1,7 @@
 hostname = "localhost"
 port = 8080
 
-[Image]
-prompt = "one line, line art, white background, black and white, simple"
-width = 900
-height = 540
-
 [OpenAI]
 apikey = "sk-<add me>..."
 width = 512
 height = 512
-
-[vpype]
-params = """linesimplify -t 1 \
-            filter -m 20 \
-            penwidth 0.3mm \
-            layout --fit-to-margins 3cm --landscape a6"""
