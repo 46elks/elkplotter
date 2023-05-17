@@ -1,3 +1,11 @@
 SERVER = "ws://localhost:8080/ws"
 DEBUG = True
 COOLDOWN = 10
+
+PROMPT = "one line, line art, white background, black and white, simple"
+VPYPE_PARAMS = \
+    [ "linesimplify -t 1"
+    , "filter -m 20"
+    , "penwidth 0.3mm"
+    , "layout --fit-to-margins 3cm --landscape a6"
+    ]

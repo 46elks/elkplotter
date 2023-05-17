@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import time
 
 import websocket
@@ -8,33 +9,16 @@ import config
 
 ad = axidraw.AxiDraw()
 
-ws = websocket.WebSocket()
-ws.connect(config.SERVER)
-
 cooldown = getattr(config, 'COOLDOWN', None)
 
-hello = ws.recv()
-if hello != "hello!":
-    raise Exception("Invalid hello from server.")
-
-ws.send("hello, server!")
-while True:
-    print("Sending ready to server.")
-    ws.send("ready.")
-
-    command = ws.recv()
-    if not command.startswith("pleaseplot: "):
-        print("Got unknown command from server: ", command[:20])
-        continue
-
-    svg = command.removeprefix("pleaseplot: ")
+def plot(svg):
     try:
         ad.plot_setup(svg)
     except RuntimeError:
         print("Got invalid SVG from server.")
-        continue
+        return
 
-    print("Received SVG!")
+    print("Received valid SVG!")
     print()
 
     ad.options.report_time = True
@@ -54,3 +38,44 @@ while True:
     if cooldown:
         print(f"Cooling down for {cooldown} seconds...")
         time.sleep(cooldown)
+
+
+def main():
+    ws = websocket.WebSocket()
+    ws.connect(config.SERVER)
+
+    print("Sending registration.")
+    registration = {
+        "method": "register",
+        "params": {
+            "prompt": config.PROMPT,
+            "vpypeParams": " ".join(config.VPYPE_PARAMS)
+        }
+    }
+    ws.send(json.dumps(registration))
+    reg_result = ws.recv()
+    assert json.loads(reg_result)["result"] == "registered"
+
+    while True:
+        print("Sending ready to server.")
+        ws.send("""{"method": "ready"}""")
+        ready_ok = ws.recv()
+        assert json.loads(ready_ok)["result"] == "readyok"
+
+        message = ws.recv()
+        try:
+            data = json.loads(message)
+        except ValueError:
+            print("Could not parse message.")
+            continue
+
+        if data.get("method") == "plot":
+            svg = data["params"]["image"]
+            plot(svg)
+        else:
+            print("Got unknown method from server: ", data)
+            continue
+
+
+if __name__ == "__main__":
+    main()

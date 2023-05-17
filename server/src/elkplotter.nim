@@ -15,8 +15,13 @@ import mummy, mummy/routers
 import webby
 
 type
+  PlotterConfig = object
+    prompt: string
+    vpypeParams: string
   Plotter = object
     websocket: WebSocket
+    config: PlotterConfig
+    isRegistered: bool
     isReady: bool
   HttpError = object of IOError
 
@@ -25,7 +30,7 @@ let
 
 var
   L: Lock
-  clients: OrderedTable[WebSocket, Plotter]
+  clients: Table[WebSocket, Plotter]
   tlsConfig {.threadvar.}: Config
 
 initLock(L)
@@ -68,11 +73,10 @@ proc dallE(prompt: string): string =
     b64_json = respData["data"][0]["b64_json"]
   result = decode(b64_json.str)
 
-proc vpype(inpath, outpath: string) =
-  let vpypeParams = getConfig().getSectionValue("vpype", "params")
-  discard execShellCmd(fmt"vpype iread {inpath} {vpypeParams} write {outpath}")
+proc vpype(inpath, outpath, params: string) =
+  discard execShellCmd(fmt"vpype iread {inpath} {params} write {outpath}")
 
-proc generateImage(prompt: string): string =
+proc generateImage(prompt: string, vpypeParams: string): string =
   let image = dallE(prompt)
 
   let (imgfile, inpath) = createTempFile("elkplotter_", "_orig.png")
@@ -81,7 +85,7 @@ proc generateImage(prompt: string): string =
 
   let (tracefile, outpath) = createTempFile("elkplotter_", "_traced.svg")
   close tracefile
-  vpype(inpath, outpath)
+  vpype(inpath, outpath, vpypeParams)
 
   removeFile(inpath)
   result = outpath
@@ -125,11 +129,11 @@ proc smsHandler(request: Request) {.gcsafe.} =
     path: string
   try:
     let
-      promptPrefix = getConfig().getSectionValue("Image", "prompt")
+      promptPrefix = plotter.config.prompt
       prompt = promptPrefix & ", " & userPrompt
-    path = generateImage(prompt)
+    path = generateImage(prompt, plotter.config.vpypeParams)
     let image = readFile(path)
-    wsMessage = "pleaseplot: " & image
+    wsMessage = $(%* {"method": "plot", "params": {"image": image}})
   except CatchableError as e:
     echo "Could not generate image."
     {.gcsafe.}:
@@ -141,11 +145,35 @@ proc smsHandler(request: Request) {.gcsafe.} =
   plotter.websocket.send(wsMessage)
   removeFile(path)
 
+proc handleRpc(ws: WebSocket, s: string) =
+  let j = parseJson(s)
+  case j["method"].str
+  of "register":
+    let config = j["params"].to(PlotterConfig)
+    {.gcsafe.}:
+      withLock L:
+        clients.withValue(ws, plotter):
+          plotter.config = config
+          plotter.isRegistered = true
+    echo fmt"Plotter {ws} registered with: {config}"
+    ws.send("""{"result": "registered"}""")
+  of "ready":
+    var res: string
+    {.gcsafe.}:
+      withLock L:
+        clients.withValue(ws, plotter):
+          if plotter.isRegistered:
+            plotter.isReady = true
+            res = """{"result": "readyok"}"""
+            echo fmt"Plotter {ws} is ready."
+          else:
+            res = """{"error": "not registered"}"""
+    ws.send(res)
+  else:
+    ws.send("""{"error": "bad request"}""")
+
 proc upgradeHandler(request: Request) =
-  let websocket = request.upgradeToWebSocket()
-  {.gcsafe.}:
-    withLock L:
-      websocket.send("hello!")
+  discard request.upgradeToWebSocket()
 
 proc wsHandler(websocket: WebSocket,
                event: WebSocketEvent,
@@ -157,13 +185,8 @@ proc wsHandler(websocket: WebSocket,
       withLock L:
         clients[websocket] = Plotter(websocket: websocket, isReady: false)
   of MessageEvent:
-    let data = message.data.strip()
-    echo message.kind, ": ", data
-    if data == "ready.":
-      echo fmt"Plotter {websocket} is ready."
-      {.gcsafe.}:
-        withLock L:
-          clients[websocket].isReady = true
+    echo message.kind, ": ", message.data
+    websocket.handleRpc(message.data)
   of CloseEvent:
     echo "Client disconnected: ", websocket
     {.gcsafe.}:
