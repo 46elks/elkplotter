@@ -92,6 +92,7 @@ proc generateImage(prompt: string, vpypeParams: string): string =
 
 proc smsHandler(request: Request) {.gcsafe.} =
   let
+    config = getConfig()
     data = request.body.parseSearch()
     userPrompt = data["message"]
     smsTimestamp = data["created"]
@@ -116,10 +117,10 @@ proc smsHandler(request: Request) {.gcsafe.} =
             plotter = pl
             break findPlotter
         echo "SMS received, but no vacant plotters. Message: ", userPrompt
-        request.respond(200, body = "All plotters are busy right now, try again later! :)")
+        request.respond(200, body = config.getSectionValue("", "sms_response_busy"))
         return
 
-  request.respond(200, body = "Got it, sending to plotter! 📠")
+  request.respond(200, body = config.getSectionValue("", "sms_response_ack"))
 
   echo fmt"SMS received, found vacant plotter {plotter}."
   echo "Generating image for: ", userPrompt
