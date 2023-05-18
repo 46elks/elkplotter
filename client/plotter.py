@@ -7,11 +7,10 @@ from pyaxidraw import axidraw
 
 import config
 
-ad = axidraw.AxiDraw()
-
 cooldown = getattr(config, 'COOLDOWN', None)
 
 def plot(svg):
+    ad = axidraw.AxiDraw()
     try:
         ad.plot_setup(svg)
     except RuntimeError:
