@@ -42,6 +42,7 @@ def plot(svg):
 def main():
     ws = websocket.WebSocket()
     ws.connect(config.SERVER)
+    print("Connected to server.")
 
     print("Sending registration.")
     registration = {
@@ -77,4 +78,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+        except websocket._exceptions.WebSocketConnectionClosedException:
+            print("Connection to server lost, retrying in 5 seconds.")
+        except ConnectionRefusedError:
+            print("Could not connect to server, retrying in 5 seconds.")
+        time.sleep(5)
