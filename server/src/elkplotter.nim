@@ -1,5 +1,6 @@
 import std/[
   base64,
+  db_sqlite,
   httpclient,
   json,
   locks,
@@ -27,11 +28,13 @@ type
 
 let
   globalConfig = loadConfig("config.ini")
+  globalDb = open("elkplotter.db", "", "", "")
 
 var
   L: Lock
   clients: Table[WebSocket, Plotter]
   tlsConfig {.threadvar.}: Config
+  tlsDb {.threadvar.}: DbConn
 
 initLock(L)
 
@@ -41,6 +44,13 @@ proc getConfig(): Config =
       withLock L:
         tlsConfig = globalConfig
   result = tlsConfig
+
+proc getDb(): DbConn =
+  if tlsDb.isNil:
+    {.gcsafe.}:
+      withLock L:
+        tlsDb = globalDb
+  result = tlsDb
 
 proc dallE(prompt: string): string =
   let
@@ -94,10 +104,12 @@ proc smsHandler(request: Request) {.gcsafe.} =
   let
     config = getConfig()
     data = request.body.parseSearch()
+    number = data["from"]
     userPrompt = data["message"]
     smsTimestamp = data["created"]
     smsdt = smsTimestamp.parse("yyyy-MM-dd hh:mm:ss'.'ffffff", tz=utc())
-    timedelta = now().utc - smsdt
+    now = now().utc
+    timedelta = now - smsdt
 
   if timedelta > initDuration(minutes=1):
     request.respond(204)
@@ -120,11 +132,25 @@ proc smsHandler(request: Request) {.gcsafe.} =
         request.respond(200, body = config.getSectionValue("", "sms_response_busy"))
         return
 
-  request.respond(200, body = config.getSectionValue("", "sms_response_ack"))
-
   echo fmt"SMS received, found vacant plotter {plotter}."
-  echo "Generating image for: ", userPrompt
 
+  let
+    maxReplies = config.getSectionValue("", "max_replies").parseInt()
+    replyMaxAge = config.getSectionValue("", "replies_max_age").parseInt()
+    replyCutoff = now - initDuration(seconds=replyMaxAge)
+    replies = getDb().getAllRows(
+      sql"SELECT id FROM replies WHERE number = ? AND timestamp >= ?",
+      number, replyCutoff
+    )
+  if replies.len < maxReplies:
+    request.respond(200, body = config.getSectionValue("", "sms_response_ack"))
+  else:
+    request.respond(204)
+
+  getDb().exec(sql"INSERT INTO replies (number, timestamp) VALUES (?, ?)",
+               number, now)
+
+  echo "Generating image for: ", userPrompt
   var
     wsMessage: string
     path: string
@@ -197,6 +223,11 @@ proc wsHandler(websocket: WebSocket,
     discard
 
 when isMainModule:
+  globalDb.exec(sql"""CREATE TABLE IF NOT EXISTS replies (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      number TEXT,
+                      timestamp DATETIME
+                   )""")
   var router: Router
   router.post("/new-sms", smsHandler)
   router.get("/ws", upgradeHandler)
