@@ -28,29 +28,25 @@ type
 
 let
   globalConfig = loadConfig("config.ini")
-  globalDb = open("elkplotter.db", "", "", "")
+  db = open("elkplotter.db", "", "", "")
 
 var
   L: Lock
   clients: Table[WebSocket, Plotter]
   tlsConfig {.threadvar.}: Config
-  tlsDb {.threadvar.}: DbConn
 
 initLock(L)
 
+template gcSafeWithLock(l: Lock, body: untyped) =
+  {.gcsafe.}:
+    withLock l:
+      body
+
 proc getConfig(): Config =
   if tlsConfig.isNil:
-    {.gcsafe.}:
-      withLock L:
-        tlsConfig = globalConfig
+    gcSafeWithLock L:
+      tlsConfig = globalConfig
   result = tlsConfig
-
-proc getDb(): DbConn =
-  if tlsDb.isNil:
-    {.gcsafe.}:
-      withLock L:
-        tlsDb = globalDb
-  result = tlsDb
 
 proc dallE(prompt: string): string =
   let
@@ -116,21 +112,20 @@ proc smsHandler(request: Request) {.gcsafe.} =
     return
 
   var plotter: Plotter
-  {.gcsafe.}:
-    withLock L:
-      if clients.len == 0:
-        request.respond(204)
-        echo "SMS received, but no plotters connected. Message: ", userPrompt
-        return
-      block findPlotter:
-        for ws, pl in clients.mpairs:
-          if pl.isReady:
-            pl.isReady = false
-            plotter = pl
-            break findPlotter
-        echo "SMS received, but no vacant plotters. Message: ", userPrompt
-        request.respond(200, body = config.getSectionValue("", "sms_response_busy"))
-        return
+  gcSafeWithLock L:
+    if clients.len == 0:
+      request.respond(204)
+      echo "SMS received, but no plotters connected. Message: ", userPrompt
+      return
+    block findPlotter:
+      for ws, pl in clients.mpairs:
+        if pl.isReady:
+          pl.isReady = false
+          plotter = pl
+          break findPlotter
+      echo "SMS received, but no vacant plotters. Message: ", userPrompt
+      request.respond(200, body = config.getSectionValue("", "sms_response_busy"))
+      return
 
   echo fmt"SMS received, found vacant plotter {plotter}."
 
@@ -138,7 +133,10 @@ proc smsHandler(request: Request) {.gcsafe.} =
     maxReplies = config.getSectionValue("", "max_replies").parseInt()
     replyMaxAge = config.getSectionValue("", "replies_max_age").parseInt()
     replyCutoff = now - initDuration(seconds=replyMaxAge)
-    replies = getDb().getAllRows(
+
+  var replies: seq[Row]
+  gcSafeWithLock L:
+    replies = db.getAllRows(
       sql"SELECT id FROM replies WHERE number = ? AND timestamp >= ?",
       number, replyCutoff
     )
@@ -147,8 +145,9 @@ proc smsHandler(request: Request) {.gcsafe.} =
   else:
     request.respond(204)
 
-  getDb().exec(sql"INSERT INTO replies (number, timestamp) VALUES (?, ?)",
-               number, now)
+  gcSafeWithLock L:
+    db.exec(sql"INSERT INTO replies (number, timestamp) VALUES (?, ?)",
+            number, now)
 
   echo "Generating image for: ", userPrompt
   var
@@ -163,9 +162,8 @@ proc smsHandler(request: Request) {.gcsafe.} =
     wsMessage = $(%* {"method": "plot", "params": {"image": image}})
   except CatchableError as e:
     echo "Could not generate image."
-    {.gcsafe.}:
-      withLock L:
-        clients[plotter.websocket].isReady = true
+    gcSafeWithLock L:
+      clients[plotter.websocket].isReady = true
     raise e
 
   echo "Sending to plotter..."
@@ -177,24 +175,22 @@ proc handleRpc(ws: WebSocket, s: string) =
   case j["method"].str
   of "register":
     let config = j["params"].to(PlotterConfig)
-    {.gcsafe.}:
-      withLock L:
-        clients.withValue(ws, plotter):
-          plotter.config = config
-          plotter.isRegistered = true
+    gcSafeWithLock L:
+      clients.withValue(ws, plotter):
+        plotter.config = config
+        plotter.isRegistered = true
     echo fmt"Plotter {ws} registered with: {config}"
     ws.send("""{"result": "registered"}""")
   of "ready":
     var res: string
-    {.gcsafe.}:
-      withLock L:
-        clients.withValue(ws, plotter):
-          if plotter.isRegistered:
-            plotter.isReady = true
-            res = """{"result": "readyok"}"""
-            echo fmt"Plotter {ws} is ready."
-          else:
-            res = """{"error": "not registered"}"""
+    gcSafeWithLock L:
+      clients.withValue(ws, plotter):
+        if plotter.isRegistered:
+          plotter.isReady = true
+          res = """{"result": "readyok"}"""
+          echo fmt"Plotter {ws} is ready."
+        else:
+          res = """{"error": "not registered"}"""
     ws.send(res)
   else:
     ws.send("""{"error": "bad request"}""")
@@ -208,26 +204,24 @@ proc wsHandler(websocket: WebSocket,
   case event
   of OpenEvent:
     echo "Client connected: ", websocket
-    {.gcsafe.}:
-      withLock L:
-        clients[websocket] = Plotter(websocket: websocket, isReady: false)
+    gcSafeWithLock L:
+      clients[websocket] = Plotter(websocket: websocket, isReady: false)
   of MessageEvent:
     echo message.kind, ": ", message.data
     websocket.handleRpc(message.data)
   of CloseEvent:
     echo "Client disconnected: ", websocket
-    {.gcsafe.}:
-      withLock L:
-        clients.del(websocket)
+    gcSafeWithLock L:
+      clients.del(websocket)
   of ErrorEvent:
     discard
 
 when isMainModule:
-  globalDb.exec(sql"""CREATE TABLE IF NOT EXISTS replies (
-                      id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      number TEXT,
-                      timestamp DATETIME
-                   )""")
+  db.exec(sql"""CREATE TABLE IF NOT EXISTS replies (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  number TEXT,
+                  timestamp DATETIME
+                )""")
   var router: Router
   router.post("/new-sms", smsHandler)
   router.get("/ws", upgradeHandler)
