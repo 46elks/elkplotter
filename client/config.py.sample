@@ -1,8 +1,14 @@
+# Address to the server
 SERVER = "ws://localhost:8080/ws"
+# In debug mode nothing is printed
 DEBUG = True
+# Cooldown between plots, for example to change paper
 COOLDOWN = 10
 
+# The prompt that the server will prefix to the prompt received via SMS
 PROMPT = "one line, line art, white background, black and white, simple"
+
+# Parameters to vpype
 VPYPE_PARAMS = \
     [ "linesimplify -t 1"
     , "filter -m 20"
