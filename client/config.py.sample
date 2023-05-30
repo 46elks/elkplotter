@@ -13,5 +13,6 @@ VPYPE_PARAMS = \
     [ "linesimplify -t 1"
     , "filter -m 20"
     , "penwidth 0.3mm"
-    , "layout --fit-to-margins 3cm --landscape a6"
+    , "layout --fit-to-margins 12mm --landscape a6"
+    , "text --size 20 --position 20mm 97mm --align left --wrap 120mm '%prompt%'"
     ]

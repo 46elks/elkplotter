@@ -79,11 +79,16 @@ proc dallE(prompt: string): string =
     b64_json = respData["data"][0]["b64_json"]
   result = decode(b64_json.str)
 
-proc vpype(inpath, outpath, params: string) =
-  discard execShellCmd(fmt"vpype iread {inpath} {params} write {outpath}")
+proc vpype(inpath, outpath, params, prompt: string) =
+  let
+    formattedParams = params.replaceWord("%prompt%", prompt)
+    cmd = fmt"vpype iread {inpath} {formattedParams} write {outpath}"
+  discard execShellCmd(cmd)
 
-proc generateImage(prompt: string, vpypeParams: string): string =
-  let image = dallE(prompt)
+proc generateImage(promptPrefix, prompt, vpypeParams: string): string =
+  let
+    prefixedPrompt = promptPrefix & ", " & prompt
+    image = dallE(prefixedPrompt)
 
   let (imgfile, inpath) = createTempFile("elkplotter_", "_orig.png")
   imgfile.write(image)
@@ -91,7 +96,8 @@ proc generateImage(prompt: string, vpypeParams: string): string =
 
   let (tracefile, outpath) = createTempFile("elkplotter_", "_traced.svg")
   close tracefile
-  vpype(inpath, outpath, vpypeParams)
+
+  vpype(inpath, outpath, vpypeParams, prompt)
 
   removeFile(inpath)
   result = outpath
@@ -154,11 +160,9 @@ proc smsHandler(request: Request) {.gcsafe.} =
     wsMessage: string
     path: string
   try:
-    let
-      promptPrefix = plotter.config.prompt
-      prompt = promptPrefix & ", " & userPrompt
-    path = generateImage(prompt, plotter.config.vpypeParams)
-    let image = readFile(path)
+    let promptPrefix = plotter.config.prompt
+    path = generateImage(promptPrefix, userPrompt, plotter.config.vpypeParams)
+    let image = path.readFile()
     wsMessage = $(%* {"method": "plot", "params": {"image": image}})
   except CatchableError as e:
     echo "Could not generate image."
