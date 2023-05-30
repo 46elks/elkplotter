@@ -81,7 +81,7 @@ proc dallE(prompt: string): string =
 
 proc vpype(inpath, outpath, params, prompt: string) =
   let
-    formattedParams = params.replaceWord("%prompt%", prompt)
+    formattedParams = params.replace("%prompt%", prompt)
     cmd = fmt"vpype iread {inpath} {formattedParams} write {outpath}"
   discard execShellCmd(cmd)
 
