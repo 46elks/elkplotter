@@ -1,9 +1,9 @@
 # Package
 
 version       = "0.1.0"
-author        = "Rupus Reinefjord"
+author        = "Rupus Reinefjord, 46elks AB"
 description   = "SMS-to-plotter service"
-license       = "Proprietary"
+license       = "0BSD"
 srcDir        = "src"
 bin           = @["elkplotter"]
 
