@@ -1,6 +1,5 @@
 import std/[
   base64,
-  db_sqlite,
   httpclient,
   json,
   locks,
@@ -12,6 +11,7 @@ import std/[
   tempfiles,
   times
 ]
+import db_connector/db_sqlite
 import mummy, mummy/routers
 import webby
 
