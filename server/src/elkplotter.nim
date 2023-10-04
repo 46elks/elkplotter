@@ -17,6 +17,7 @@ import webby
 
 type
   PlotterConfig = object
+    phonenumber: string
     prompt: string
     vpypeParams: string
   Plotter = object
@@ -106,7 +107,8 @@ proc smsHandler(request: Request) {.gcsafe.} =
   let
     config = getConfig()
     data = request.body.parseSearch()
-    number = data["from"]
+    fromNumber = data["from"]
+    toNumber = data["to"]
     userPrompt = data["message"]
     smsTimestamp = data["created"]
     smsdt = smsTimestamp.parse("yyyy-MM-dd hh:mm:ss'.'ffffff", tz=utc())
@@ -125,10 +127,13 @@ proc smsHandler(request: Request) {.gcsafe.} =
       return
     block findPlotter:
       for ws, pl in clients.mpairs:
-        if pl.isReady:
-          pl.isReady = false
-          plotter = pl
-          break findPlotter
+        if not pl.isReady:
+          continue
+        if pl.config.phonenumber != toNumber:
+          continue
+        pl.isReady = false
+        plotter = pl
+        break findPlotter
       echo "SMS received, but no vacant plotters. Message: ", userPrompt
       request.respond(200, body = config.getSectionValue("", "sms_response_busy"))
       return
@@ -144,7 +149,7 @@ proc smsHandler(request: Request) {.gcsafe.} =
   gcSafeWithLock L:
     replies = db.getAllRows(
       sql"SELECT id FROM replies WHERE number = ? AND timestamp >= ?",
-      number, replyCutoff
+      fromNumber, replyCutoff
     )
   if replies.len < maxReplies:
     request.respond(200, body = config.getSectionValue("", "sms_response_ack"))
@@ -153,7 +158,7 @@ proc smsHandler(request: Request) {.gcsafe.} =
 
   gcSafeWithLock L:
     db.exec(sql"INSERT INTO replies (number, timestamp) VALUES (?, ?)",
-            number, now)
+            fromNumber, now)
 
   echo "Generating image for: ", userPrompt
   var

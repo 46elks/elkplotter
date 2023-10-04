@@ -48,6 +48,7 @@ def main():
     registration = {
         "method": "register",
         "params": {
+            "phonenumber": config.PHONENUMBER,
             "prompt": config.PROMPT,
             "vpypeParams": " ".join(config.VPYPE_PARAMS)
         }

@@ -5,6 +5,11 @@ DEBUG = True
 # Cooldown between plots, for example to change paper
 COOLDOWN = 10
 
+# The phonenumber of the plotter. If multiple plotters have the same
+# phonenumber, a vacant plotter will be chosen at random. In other words,
+# if an SMS is received and one plotter is busy, another one will be chosen.
+PHONENUMBER = "+46766861234"
+
 # The prompt that the server will prefix to the prompt received via SMS
 PROMPT = "one line, line art, white background, black and white, simple"
 
