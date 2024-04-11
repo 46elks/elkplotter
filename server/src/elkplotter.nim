@@ -84,7 +84,7 @@ proc dallE(prompt: string): string =
 proc vpype(inpath, outpath, params, prompt: string) =
   let formattedParams = params.replace("%prompt%", prompt)
   discard startProcess("vpype",
-                       args=[fmt"iread {inpath}", formattedParams, "write {outpath}"],
+                       args=[fmt"iread {inpath}", formattedParams, fmt"write {outpath}"],
                        options={poUsePath})
 
 proc generateImage(promptPrefix, prompt, vpypeParams: string): string =
