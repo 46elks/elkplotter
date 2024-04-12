@@ -4,7 +4,6 @@ import std/[
   json,
   locks,
   os,
-  osproc,
   parsecfg,
   strformat,
   strutils,
@@ -82,10 +81,11 @@ proc dallE(prompt: string): string =
   result = decode(b64_json.str)
 
 proc vpype(inpath, outpath, params, prompt: string) =
-  let formattedParams = params.replace("%prompt%", prompt)
-  discard startProcess("vpype",
-                       args=[fmt"iread {inpath}", formattedParams, fmt"write {outpath}"],
-                       options={poUsePath})
+  let
+    quoted = quoteShell(prompt)
+    formattedParams = params.replace("%prompt%", quoted)
+    cmd = fmt"vpype iread {inpath} {formattedParams} write {outpath}"
+  discard execShellCmd(cmd)
 
 proc generateImage(promptPrefix, prompt, vpypeParams: string): string =
   let
