@@ -9,8 +9,7 @@ import config
 
 cooldown = getattr(config, 'COOLDOWN', None)
 
-def plot(svg):
-    ad = axidraw.AxiDraw()
+def plot(ad, svg):
     try:
         ad.plot_setup(svg)
     except RuntimeError:
@@ -25,7 +24,7 @@ def plot(svg):
     ad.plot_run()
 
     if config.DEBUG:
-        print("Debug mode active, twiddling thumbs...")
+        print("DEBUG mode active, twiddling thumbs...")
     else:
         print("Starting plot...\n")
         ad.options.preview = False
@@ -58,10 +57,21 @@ def main():
     assert json.loads(reg_result)["result"] == "registered"
 
     while True:
+        ad = axidraw.AxiDraw()
+        ad.interactive()
+        if not ad.connect():
+            print("Could not connect to plotter, retrying in 5 seconds...")
+            time.sleep(5)
+            continue
+        ad.moveto(0.5, 0.5)
+        ad.moveto(0, 0)
+
         print("Sending ready to server.")
         ws.send("""{"method": "ready"}""")
         ready_ok = ws.recv()
         assert json.loads(ready_ok)["result"] == "readyok"
+
+        print("\nReady to plot!")
 
         message = ws.recv()
         try:
@@ -72,7 +82,7 @@ def main():
 
         if data.get("method") == "plot":
             svg = data["params"]["image"]
-            plot(svg)
+            plot(ad, svg)
         else:
             print("Got unknown method from server: ", data)
             continue
