@@ -72,6 +72,7 @@ def main():
         assert json.loads(ready_ok)["result"] == "readyok"
 
         print("\nReady to plot!")
+        print(f"Phonenumber: {config.PHONENUMBER}")
 
         message = ws.recv()
         try:
