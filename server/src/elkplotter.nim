@@ -9,7 +9,8 @@ import std/[
   strutils,
   tables,
   tempfiles,
-  times
+  times,
+  unidecode
 ]
 import db_connector/db_sqlite
 import mummy, mummy/routers
@@ -83,7 +84,8 @@ proc dallE(prompt: string): string =
 proc vpype(inpath, outpath, params, prompt: string) =
   let
     quoted = quoteShell(prompt)
-    formattedParams = params.replace("%prompt%", quoted)
+    asciified = unidecode(quoted)
+    formattedParams = params.replace("%prompt%", asciified)
     cmd = fmt"vpype iread {inpath} {formattedParams} write {outpath}"
   discard execShellCmd(cmd)
 
