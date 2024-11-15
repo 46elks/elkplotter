@@ -56,6 +56,7 @@ proc dallE(prompt: string): string =
     openAIkey = config.getSectionValue("OpenAI", "apikey")
     imageWidth = config.getSectionValue("OpenAI", "width")
     imageHeight = config.getSectionValue("OpenAI", "height")
+    model = config.getSectionValue("OpenAI", "model")
 
   let client = newHttpClient()
   client.headers = newHttpHeaders({
@@ -69,6 +70,7 @@ proc dallE(prompt: string): string =
       , "n": 1
       , "size": fmt"{imageWidth}x{imageHeight}"
       , "response_format": "b64_json"
+      , "model": model
       }
     response = client.post("https://api.openai.com/v1/images/generations", body = $data)
 
