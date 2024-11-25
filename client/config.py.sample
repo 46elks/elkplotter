@@ -18,13 +18,13 @@ MODEL = "dall-e-2"
 SIZE = "512x512"
 
 # The prompt that the server will prefix to the prompt received via SMS
-PROMPT = "one line, line art, white background, black and white, simple"
+PROMPT = "Line art, black and white, simple, low complexity, few pen strokes, no text: "
 
 # Parameters to vpype
 VPYPE_PARAMS = \
     [ "linesimplify -t 1"
     , "filter -m 20"
     , "penwidth 0.3mm"
-    , "layout --fit-to-margins 12mm --landscape a6"
+    , "layout --fit-to-margins 20mm --landscape a6"
     , "text --size 20 --position 20mm 97mm --align left --wrap 120mm %prompt%"
     ]

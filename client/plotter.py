@@ -88,19 +88,15 @@ def main():
         sys.exit(1)
 
     while True:
-        if not config.TESTING:
-            ad = connect_plotter()
-
-            input("Press enter when ready...")
-
-            ad.moveto(0.5, 0.5)
-            ad.moveto(0, 0)
-            ad.disconnect()
-
         print("Sending ready to server.")
         ws.send("""{"method": "ready"}""")
         ready_ok = ws.recv()
         assert json.loads(ready_ok)["result"] == "readyok"
+
+        ad = connect_plotter()
+        ad.moveto(0.5, 0.5)
+        ad.moveto(0, 0)
+        ad.disconnect()
 
         print("\nReady to plot!")
 
@@ -113,8 +109,7 @@ def main():
 
         if data.get("method") == "plot":
             svg = data["params"]["image"]
-            if not config.TESTING:
-                plot(ad, svg)
+            plot(ad, svg)
             save_image(svg.encode('utf-8'))
         else:
             print("Got unknown method from server: ", data)
