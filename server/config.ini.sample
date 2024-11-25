@@ -1,12 +1,9 @@
 hostname = "localhost"
 port = 8080
-sms_response_ack = "Sending to plotter! 📠"
+sms_response_ack = "Plotting! 📠\n\nYou can build something like this too! Sign up at https://46elks.com"
 sms_response_busy = "All plotters are busy right now, try again later! :)"
 max_replies = 2
 replies_max_age = 3600
 
 [OpenAI]
 apikey = "sk-<add me>..."
-model = "dall-e-3"
-width = 512
-height = 512

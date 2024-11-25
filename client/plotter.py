@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import datetime
 import json
+import pathlib
+import sys
 import time
 
 import websocket
@@ -24,7 +27,7 @@ def plot(ad, svg):
     ad.plot_run()
 
     if config.DEBUG:
-        print("DEBUG mode active, twiddling thumbs...")
+        print("Debug mode active, twiddling thumbs...")
     else:
         print("Starting plot...\n")
         ad.options.preview = False
@@ -38,33 +41,61 @@ def plot(ad, svg):
         time.sleep(cooldown)
 
 
+def connect_plotter():
+    ad = axidraw.AxiDraw()
+    ad.interactive()
+
+    while not ad.connect():
+        print("Could not connect to plotter.")
+        print("Retrying in 5 seconds...")
+        time.sleep(5)
+
+    return ad
+
+
+def save_image(img):
+    save_path = pathlib.Path("images")
+    save_path.mkdir(exist_ok=True)
+    file_path = save_path / datetime.datetime.now().isoformat()
+    with open(file_path, 'wb') as f:
+        f.write(img)
+
+
 def main():
     ws = websocket.WebSocket()
     ws.connect(config.SERVER)
     print("Connected to server.")
 
     print("Sending registration.")
+    print("Phonenumber: ", config.PHONENUMBER)
     registration = {
         "method": "register",
         "params": {
             "phonenumber": config.PHONENUMBER,
             "prompt": config.PROMPT,
+            "model": config.MODEL,
+            "size": config.SIZE,
             "vpypeParams": " ".join(config.VPYPE_PARAMS)
         }
     }
     ws.send(json.dumps(registration))
     reg_result = ws.recv()
-    assert json.loads(reg_result)["result"] == "registered"
+    try:
+        assert json.loads(reg_result)["result"] == "registered"
+    except (KeyError, AssertionError):
+        print("Could not register, response from server was:")
+        print(reg_result)
+        sys.exit(1)
 
     while True:
-        ad = axidraw.AxiDraw()
-        ad.interactive()
-        if not ad.connect():
-            print("Could not connect to plotter, retrying in 5 seconds...")
-            time.sleep(5)
-            continue
-        ad.moveto(0.5, 0.5)
-        ad.moveto(0, 0)
+        if not config.TESTING:
+            ad = connect_plotter()
+
+            input("Press enter when ready...")
+
+            ad.moveto(0.5, 0.5)
+            ad.moveto(0, 0)
+            ad.disconnect()
 
         print("Sending ready to server.")
         ws.send("""{"method": "ready"}""")
@@ -72,7 +103,6 @@ def main():
         assert json.loads(ready_ok)["result"] == "readyok"
 
         print("\nReady to plot!")
-        print(f"Phonenumber: {config.PHONENUMBER}")
 
         message = ws.recv()
         try:
@@ -83,7 +113,9 @@ def main():
 
         if data.get("method") == "plot":
             svg = data["params"]["image"]
-            plot(ad, svg)
+            if not config.TESTING:
+                plot(ad, svg)
+            save_image(svg.encode('utf-8'))
         else:
             print("Got unknown method from server: ", data)
             continue

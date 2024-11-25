@@ -19,6 +19,8 @@ import webby
 type
   PlotterConfig = object
     phonenumber: string
+    model: string
+    size: string
     prompt: string
     vpypeParams: string
   Plotter = object
@@ -50,13 +52,10 @@ proc getConfig(): Config =
       tlsConfig = globalConfig
   result = tlsConfig
 
-proc dallE(prompt: string): string =
+proc dallE(plotterConf: PlotterConfig, prompt: string): string =
   let
     config = getConfig()
     openAIkey = config.getSectionValue("OpenAI", "apikey")
-    imageWidth = config.getSectionValue("OpenAI", "width")
-    imageHeight = config.getSectionValue("OpenAI", "height")
-    model = config.getSectionValue("OpenAI", "model")
 
   let client = newHttpClient()
   client.headers = newHttpHeaders({
@@ -67,10 +66,10 @@ proc dallE(prompt: string): string =
   let
     data = %*
       { "prompt": prompt
+      , "model": plotterConf.model
+      , "size": plotterConf.size
       , "n": 1
-      , "size": fmt"{imageWidth}x{imageHeight}"
       , "response_format": "b64_json"
-      , "model": model
       }
     response = client.post("https://api.openai.com/v1/images/generations", body = $data)
 
@@ -91,10 +90,10 @@ proc vpype(inpath, outpath, params, prompt: string) =
     cmd = fmt"vpype iread {inpath} {formattedParams} write {outpath}"
   discard execShellCmd(cmd)
 
-proc generateImage(promptPrefix, prompt, vpypeParams: string): string =
+proc generateImage(plotterConf: PlotterConfig, prompt: string): string =
   let
-    prefixedPrompt = promptPrefix & ", " & prompt
-    image = dallE(prefixedPrompt)
+    prefixedPrompt = plotterConf.prompt & " " & prompt
+    image = dallE(plotterConf, prefixedPrompt)
 
   let (imgfile, inpath) = createTempFile("elkplotter_", "_orig.png")
   imgfile.write(image)
@@ -103,7 +102,7 @@ proc generateImage(promptPrefix, prompt, vpypeParams: string): string =
   let (tracefile, outpath) = createTempFile("elkplotter_", "_traced.svg")
   close tracefile
 
-  vpype(inpath, outpath, vpypeParams, prompt)
+  vpype(inpath, outpath, plotterConf.vpypeParams, prompt)
 
   removeFile(inpath)
   result = outpath
@@ -171,7 +170,7 @@ proc smsHandler(request: Request) {.gcsafe.} =
     path: string
   try:
     let promptPrefix = plotter.config.prompt
-    path = generateImage(promptPrefix, userPrompt, plotter.config.vpypeParams)
+    path = generateImage(plotter.config, userPrompt)
     let image = path.readFile()
     wsMessage = $(%* {"method": "plot", "params": {"image": image}})
   except CatchableError as e:
@@ -184,16 +183,35 @@ proc smsHandler(request: Request) {.gcsafe.} =
   plotter.websocket.send(wsMessage)
   removeFile(path)
 
-proc handleRpc(ws: WebSocket, s: string) =
-  let j = parseJson(s)
-  case j["method"].str
+proc handleRpc(ws: WebSocket, s: string) {.raises: [].} =
+  var j: JsonNode
+  var rpcMethod: string
+  try:
+    j = parseJson(s)
+  except:
+    ws.send("""{"error": "could not parse json"}""")
+    return
+  try:
+    rpcMethod = j["method"].str
+  except:
+    ws.send("""{"error": "missing key 'method'"}""")
+    return
+  case rpcMethod
   of "register":
-    let config = j["params"].to(PlotterConfig)
+    var config: PlotterConfig
+    try:
+      config = j["params"].to(PlotterConfig)
+    except:
+      ws.send("""{"error": "fix your config params"}""")
+      return
     gcSafeWithLock L:
       clients.withValue(ws, plotter):
         plotter.config = config
         plotter.isRegistered = true
-    echo fmt"Plotter {ws} registered with: {config}"
+    try:
+      echo fmt"Plotter {ws} registered with: {config}"
+    except:
+      discard
     ws.send("""{"result": "registered"}""")
   of "ready":
     var res: string
@@ -202,7 +220,10 @@ proc handleRpc(ws: WebSocket, s: string) =
         if plotter.isRegistered:
           plotter.isReady = true
           res = """{"result": "readyok"}"""
-          echo fmt"Plotter {ws} is ready."
+          try:
+            echo fmt"Plotter {ws} is ready."
+          except:
+            discard
         else:
           res = """{"error": "not registered"}"""
     ws.send(res)

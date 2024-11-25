@@ -10,6 +10,13 @@ COOLDOWN = 10
 # if an SMS is received and one plotter is busy, another one will be chosen.
 PHONENUMBER = "+46766861234"
 
+# DALL-E configuration.
+# MODEL is one of "dall-e-2" or "dall-e-3"
+# SIZE can be one "256x256", "512x512", or "1024x1024" for dall-e-2,
+# or "1024x1024", "1792x1024", or "1024x1792" for dall-e-3
+MODEL = "dall-e-2"
+SIZE = "512x512"
+
 # The prompt that the server will prefix to the prompt received via SMS
 PROMPT = "one line, line art, white background, black and white, simple"
 
